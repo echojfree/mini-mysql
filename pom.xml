@@ -22,6 +22,7 @@
         <junit.version>5.10.1</junit.version>
         <slf4j.version>1.7.36</slf4j.version>
         <logback.version>1.2.12</logback.version>
+        <antlr.version>4.9.3</antlr.version>
     </properties>
 
     <dependencies>
@@ -61,6 +62,13 @@
             <version>${junit.version}</version>
             <scope>test</scope>
         </dependency>
+
+        <!-- ANTLR 4: SQL 语法解析器 -->
+        <dependency>
+            <groupId>org.antlr</groupId>
+            <artifactId>antlr4-runtime</artifactId>
+            <version>${antlr.version}</version>
+        </dependency>
     </dependencies>
 
     <build>
@@ -87,6 +95,26 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>3.0.0</version>
+            </plugin>
+
+            <!-- ANTLR 4 插件: 自动生成词法和语法分析器 -->
+            <plugin>
+                <groupId>org.antlr</groupId>
+                <artifactId>antlr4-maven-plugin</artifactId>
+                <version>${antlr.version}</version>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>antlr4</goal>
+                        </goals>
+                    </execution>
+                </executions>
+                <configuration>
+                    <sourceDirectory>src/main/antlr4</sourceDirectory>
+                    <outputDirectory>target/generated-sources/antlr4</outputDirectory>
+                    <listener>true</listener>
+                    <visitor>true</visitor>
+                </configuration>
             </plugin>
         </plugins>
     </build>
