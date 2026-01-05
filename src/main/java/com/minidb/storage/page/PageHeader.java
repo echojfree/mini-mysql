@@ -22,13 +22,11 @@ import static com.minidb.common.Constants.*;
  * | nextPage         | 4 字节 | 后一个页面的页号（用于双向链表）                      |
  * | lastModifyLsn    | 8 字节 | 最后修改的 LSN（Log Sequence Number）               |
  * | pageType         | 1 字节 | 页面类型（数据页、索引页、Undo 页等）                |
- * | fileFlushLsn     | 8 字节 | 页面刷盘时的 LSN                                    |
  * | spaceId          | 4 字节 | 表空间 ID                                           |
  * | recordCount      | 2 字节 | 页面中的记录数                                       |
  * | freeSpace        | 2 字节 | 页面剩余空间大小                                     |
  * | heapTop          | 2 字节 | 堆顶指针，指向空闲空间的起始位置                      |
  * | firstRecordOffset| 2 字节 | 第一条记录的偏移量                                   |
- * | lastRecordOffset | 2 字节 | 最后一条记录的偏移量                                 |
  * | directionBit     | 1 字节 | 插入方向标志（顺序插入或随机插入）                    |
  * +------------------+--------+------------------------------------------------------+
  * 总计：38 字节
@@ -82,12 +80,6 @@ public class PageHeader {
     private byte pageType;
 
     /**
-     * 页面刷盘时的 LSN（8 字节）
-     * 记录页面最后一次刷盘时的 LSN
-     */
-    private long fileFlushLsn;
-
-    /**
      * 表空间 ID（4 字节）
      * 标识页面所属的表空间
      */
@@ -119,12 +111,6 @@ public class PageHeader {
     private short firstRecordOffset;
 
     /**
-     * 最后一条记录的偏移量（2 字节）
-     * 相对于页面起始位置的偏移
-     */
-    private short lastRecordOffset;
-
-    /**
      * 插入方向标志（1 字节）
      * 0：顺序插入（递增）
      * 1：随机插入
@@ -143,7 +129,6 @@ public class PageHeader {
         this.freeSpace = (short) PAGE_DATA_SIZE;
         this.heapTop = (short) PAGE_HEADER_SIZE;
         this.firstRecordOffset = 0;
-        this.lastRecordOffset = 0;
         this.directionBit = 0;
     }
 
@@ -161,14 +146,13 @@ public class PageHeader {
         buffer.putInt(nextPage);           // 4 字节
         buffer.putLong(lastModifyLsn);     // 8 字节
         buffer.put(pageType);              // 1 字节
-        buffer.putLong(fileFlushLsn);      // 8 字节
         buffer.putInt(spaceId);            // 4 字节
         buffer.putShort(recordCount);      // 2 字节
         buffer.putShort(freeSpace);        // 2 字节
         buffer.putShort(heapTop);          // 2 字节
         buffer.putShort(firstRecordOffset);// 2 字节
-        buffer.putShort(lastRecordOffset); // 2 字节
         buffer.put(directionBit);          // 1 字节
+        // 总计：4+4+4+4+8+1+4+2+2+2+2+1 = 38 字节
 
         return buffer.array();
     }
@@ -193,13 +177,11 @@ public class PageHeader {
         header.nextPage = buffer.getInt();
         header.lastModifyLsn = buffer.getLong();
         header.pageType = buffer.get();
-        header.fileFlushLsn = buffer.getLong();
         header.spaceId = buffer.getInt();
         header.recordCount = buffer.getShort();
         header.freeSpace = buffer.getShort();
         header.heapTop = buffer.getShort();
         header.firstRecordOffset = buffer.getShort();
-        header.lastRecordOffset = buffer.getShort();
         header.directionBit = buffer.get();
 
         return header;
