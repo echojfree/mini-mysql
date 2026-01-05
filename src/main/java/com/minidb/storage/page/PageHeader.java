@@ -4,32 +4,24 @@ import lombok.Data;
 
 import java.nio.ByteBuffer;
 
-import static com.minidb.common.Constants.*;
-
 /**
- * 页头（Page Header）
- * 大小：38 字节
+ * Page Header (页头)
  *
- * 页头存储页面的元数据信息，是页面管理的核心
+ * MySQL InnoDB 页头结构 (38 字节):
+ * - FIL_PAGE_SPACE (4 字节): 表空间 ID
+ * - FIL_PAGE_OFFSET (4 字节): 页号
+ * - FIL_PAGE_PREV (4 字节): 上一页页号
+ * - FIL_PAGE_NEXT (4 字节): 下一页页号
+ * - FIL_PAGE_LSN (8 字节): 最后被修改时的 LSN
+ * - FIL_PAGE_TYPE (2 字节): 页类型
+ * - FIL_PAGE_FILE_FLUSH_LSN (8 字节): 仅在第一个页中,表示文件至少被刷新到了该 LSN
+ * - FIL_PAGE_ARCH_LOG_NO (4 字节): 归档日志序号
  *
- * 结构说明：
- * +------------------+--------+------------------------------------------------------+
- * | 字段             | 大小   | 说明                                                 |
- * +------------------+--------+------------------------------------------------------+
- * | checksum         | 4 字节 | 页面校验和，用于检测页面损坏                          |
- * | pageNumber       | 4 字节 | 页号，页面在表空间中的唯一标识                        |
- * | previousPage     | 4 字节 | 前一个页面的页号（用于双向链表）                      |
- * | nextPage         | 4 字节 | 后一个页面的页号（用于双向链表）                      |
- * | lastModifyLsn    | 8 字节 | 最后修改的 LSN（Log Sequence Number）               |
- * | pageType         | 1 字节 | 页面类型（数据页、索引页、Undo 页等）                |
- * | spaceId          | 4 字节 | 表空间 ID                                           |
- * | recordCount      | 2 字节 | 页面中的记录数                                       |
- * | freeSpace        | 2 字节 | 页面剩余空间大小                                     |
- * | heapTop          | 2 字节 | 堆顶指针，指向空闲空间的起始位置                      |
- * | firstRecordOffset| 2 字节 | 第一条记录的偏移量                                   |
- * | directionBit     | 1 字节 | 插入方向标志（顺序插入或随机插入）                    |
- * +------------------+--------+------------------------------------------------------+
- * 总计：38 字节
+ * 对应八股文知识点:
+ * ✅ 页头的作用
+ * ✅ 页号的概念
+ * ✅ 双向链表的实现 (prev/next)
+ * ✅ LSN 的作用
  *
  * @author Mini-MySQL
  */
@@ -37,153 +29,118 @@ import static com.minidb.common.Constants.*;
 public class PageHeader {
 
     /**
-     * 页面校验和（4 字节）
-     * 用于检测页面是否损坏，采用 CRC32 算法
+     * 页头固定大小: 38 字节
      */
-    private int checksum;
+    public static final int PAGE_HEADER_SIZE = 38;
 
     /**
-     * 页号（4 字节）
-     * 页面在表空间中的唯一标识，从 0 开始递增
-     */
-    private int pageNumber;
-
-    /**
-     * 前一个页面的页号（4 字节）
-     * 用于构建双向链表，叶子节点通过此字段连接
-     * -1 表示没有前一个页面
-     */
-    private int previousPage;
-
-    /**
-     * 后一个页面的页号（4 字节）
-     * 用于构建双向链表，支持范围扫描
-     * -1 表示没有后一个页面
-     */
-    private int nextPage;
-
-    /**
-     * 最后修改的 LSN（8 字节）
-     * LSN（Log Sequence Number）是日志序列号
-     * 用于崩溃恢复和并发控制
-     */
-    private long lastModifyLsn;
-
-    /**
-     * 页面类型（1 字节）
-     * 可选值：
-     * - PAGE_TYPE_DATA: 数据页
-     * - PAGE_TYPE_INDEX: 索引页
-     * - PAGE_TYPE_UNDO: Undo 页
-     * - PAGE_TYPE_SYSTEM: 系统页
-     */
-    private byte pageType;
-
-    /**
-     * 表空间 ID（4 字节）
-     * 标识页面所属的表空间
+     * 表空间 ID
      */
     private int spaceId;
 
     /**
-     * 页面中的记录数（2 字节）
-     * 当前页面存储的数据行数量
+     * 页号 (在表空间中的唯一标识)
      */
-    private short recordCount;
+    private int pageNo;
 
     /**
-     * 页面剩余空间大小（2 字节）
-     * 页面中可用的空闲空间，单位：字节
+     * 上一页页号 (用于双向链表)
+     * -1 表示没有上一页
      */
-    private short freeSpace;
+    private int prevPageNo;
 
     /**
-     * 堆顶指针（2 字节）
-     * 指向页面中空闲空间的起始位置
-     * 新插入的记录从堆顶开始写入
+     * 下一页页号 (用于双向链表)
+     * -1 表示没有下一页
      */
-    private short heapTop;
+    private int nextPageNo;
 
     /**
-     * 第一条记录的偏移量（2 字节）
-     * 相对于页面起始位置的偏移
+     * 页面最后被修改时的 LSN (Log Sequence Number)
+     * LSN 单调递增,用于崩溃恢复
      */
-    private short firstRecordOffset;
+    private long pageLsn;
 
     /**
-     * 插入方向标志（1 字节）
-     * 0：顺序插入（递增）
-     * 1：随机插入
-     * 用于优化页面分裂策略
+     * 页类型
      */
-    private byte directionBit;
+    private PageType pageType;
+
+    /**
+     * 文件刷新 LSN (仅第一页使用)
+     */
+    private long fileFlushLsn;
+
+    /**
+     * 归档日志序号 (简化实现暂不使用)
+     */
+    private int archLogNo;
+
+    /**
+     * 默认构造函数
+     */
+    public PageHeader() {
+        this.spaceId = 0;
+        this.pageNo = 0;
+        this.prevPageNo = -1;
+        this.nextPageNo = -1;
+        this.pageLsn = 0;
+        this.pageType = PageType.FREE;
+        this.fileFlushLsn = 0;
+        this.archLogNo = 0;
+    }
 
     /**
      * 构造函数
      */
-    public PageHeader() {
-        // 初始化默认值
-        this.previousPage = -1;
-        this.nextPage = -1;
-        this.recordCount = 0;
-        this.freeSpace = (short) PAGE_DATA_SIZE;
-        this.heapTop = (short) PAGE_HEADER_SIZE;
-        this.firstRecordOffset = 0;
-        this.directionBit = 0;
+    public PageHeader(int spaceId, int pageNo, PageType pageType) {
+        this();
+        this.spaceId = spaceId;
+        this.pageNo = pageNo;
+        this.pageType = pageType;
     }
 
     /**
-     * 将页头序列化为字节数组
+     * 序列化到 ByteBuffer
      *
-     * @return 38 字节的字节数组
+     * @param buffer 目标缓冲区
      */
-    public byte[] serialize() {
-        ByteBuffer buffer = ByteBuffer.allocate(PAGE_HEADER_SIZE);
-
-        buffer.putInt(checksum);           // 4 字节
-        buffer.putInt(pageNumber);         // 4 字节
-        buffer.putInt(previousPage);       // 4 字节
-        buffer.putInt(nextPage);           // 4 字节
-        buffer.putLong(lastModifyLsn);     // 8 字节
-        buffer.put(pageType);              // 1 字节
-        buffer.putInt(spaceId);            // 4 字节
-        buffer.putShort(recordCount);      // 2 字节
-        buffer.putShort(freeSpace);        // 2 字节
-        buffer.putShort(heapTop);          // 2 字节
-        buffer.putShort(firstRecordOffset);// 2 字节
-        buffer.put(directionBit);          // 1 字节
-        // 总计：4+4+4+4+8+1+4+2+2+2+2+1 = 38 字节
-
-        return buffer.array();
+    public void serialize(ByteBuffer buffer) {
+        buffer.putInt(spaceId);           // 4 字节
+        buffer.putInt(pageNo);            // 4 字节
+        buffer.putInt(prevPageNo);        // 4 字节
+        buffer.putInt(nextPageNo);        // 4 字节
+        buffer.putLong(pageLsn);          // 8 字节
+        buffer.putShort((short) pageType.getCode()); // 2 字节
+        buffer.putLong(fileFlushLsn);     // 8 字节
+        buffer.putInt(archLogNo);         // 4 字节
+        // 总计: 38 字节
     }
 
     /**
-     * 从字节数组反序列化页头
+     * 从 ByteBuffer 反序列化
      *
-     * @param data 字节数组
+     * @param buffer 源缓冲区
      * @return PageHeader 对象
      */
-    public static PageHeader deserialize(byte[] data) {
-        if (data.length < PAGE_HEADER_SIZE) {
-            throw new IllegalArgumentException("Invalid page header data length: " + data.length);
-        }
-
-        ByteBuffer buffer = ByteBuffer.wrap(data);
+    public static PageHeader deserialize(ByteBuffer buffer) {
         PageHeader header = new PageHeader();
 
-        header.checksum = buffer.getInt();
-        header.pageNumber = buffer.getInt();
-        header.previousPage = buffer.getInt();
-        header.nextPage = buffer.getInt();
-        header.lastModifyLsn = buffer.getLong();
-        header.pageType = buffer.get();
         header.spaceId = buffer.getInt();
-        header.recordCount = buffer.getShort();
-        header.freeSpace = buffer.getShort();
-        header.heapTop = buffer.getShort();
-        header.firstRecordOffset = buffer.getShort();
-        header.directionBit = buffer.get();
+        header.pageNo = buffer.getInt();
+        header.prevPageNo = buffer.getInt();
+        header.nextPageNo = buffer.getInt();
+        header.pageLsn = buffer.getLong();
+        header.pageType = PageType.fromCode(buffer.getShort());
+        header.fileFlushLsn = buffer.getLong();
+        header.archLogNo = buffer.getInt();
 
         return header;
+    }
+
+    @Override
+    public String toString() {
+        return String.format("PageHeader{space=%d, page=%d, type=%s, prev=%d, next=%d, lsn=%d}",
+                spaceId, pageNo, pageType, prevPageNo, nextPageNo, pageLsn);
     }
 }
