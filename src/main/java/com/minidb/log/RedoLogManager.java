@@ -420,6 +420,39 @@ public class RedoLogManager {
     }
 
     /**
+     * Prepare 阶段 (两阶段提交)
+     *
+     * @param txnId 事务 ID
+     */
+    public void prepare(long txnId) {
+        // 简化版: 确保所有该事务的日志已刷盘
+        flush();
+        log.debug("Redo Log prepared for txnId={}", txnId);
+    }
+
+    /**
+     * Commit 阶段 (两阶段提交)
+     *
+     * @param txnId 事务 ID
+     */
+    public void commit(long txnId) {
+        // 简化版: 确保所有日志已刷盘
+        flush();
+        log.debug("Redo Log committed for txnId={}", txnId);
+    }
+
+    /**
+     * Rollback (回滚事务)
+     *
+     * @param txnId 事务 ID
+     */
+    public void rollback(long txnId) {
+        // 简化版: 标记事务回滚
+        // 完整版需要应用 Undo Log
+        log.debug("Redo Log rolled back for txnId={}", txnId);
+    }
+
+    /**
      * 清理 Redo Log 文件
      */
     public void clear() {
